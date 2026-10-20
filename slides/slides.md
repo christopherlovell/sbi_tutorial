@@ -17,8 +17,6 @@ class: cover
 
 # Simulation-Based Inference
 
-<p class="lead">What to do when you can simulate, but can't write down the likelihood</p>
-
 <div class="abs-bl m-12 text-sm muted">
 Chris Lovell
 </div>
@@ -172,7 +170,7 @@ clicks: 2
 
 # Posteriors and likelihoods are slices of the joint
 
-<div class="-mt-3 mb-3 text-center text-sm">
+<div class="-mt-4 mb-1 text-center text-sm">
 
 $P(\theta \mid x) \propto P(x \mid \theta)\, P(\theta)$ · a toy simulator: $x = \mathrm{softplus}(\theta) + \mathcal{N}(0, \sigma^2)$
 
@@ -183,16 +181,43 @@ $P(\theta \mid x) \propto P(x \mid \theta)\, P(\theta)$ · a toy simulator: $x =
 <div class="credit">Adapted from Matt Ho</div>
 
 ---
+clicks: 2
+---
 
-# Learning from samples
+# From samples to posteriors
 
-<div class="-mt-3 mb-3 text-sm muted">
+<div class="-mt-3 mb-3 text-sm muted min-h-[2.6em]">
+<v-switch>
+<template #0>
 
-With finite simulations, *rejection ABC* keeps only those within $\epsilon$ of $x_0$ – wasteful, and biased for large $\epsilon$. Neural SBI fits a smooth density to **all** of them.
+**Simulations sample the joint:** draw $\theta \sim P(\theta)$, then run the simulator, $x \sim P(x \mid \theta)$. Each dot is one simulation.
 
+</template>
+<template #1>
+
+**Rejection ABC** (Rubin 1984; Pritchard et al. 1999) keeps the simulations with $|x - x_0| < \epsilon$: the slice from the previous slide, built from samples. Most simulations are thrown away.
+
+</template>
+<template #2>
+
+**Neural SBI** instead fits a conditional density $q(\theta \mid x)$ to *all* the simulations: here a small mixture density network, trained live. Drag $x_0$: no retraining needed.
+
+</template>
+</v-switch>
 </div>
 
-<JointExplorer controls />
+<JointExplorer controls :stage="$clicks" />
+
+<!--
+Click 1 – ABC: draw from the prior, simulate, keep theta if the simulated x is within epsilon of the observation. The kept thetas sample P(theta | d(x, x_obs) < epsilon), which tends to the true posterior as epsilon -> 0.
+
+Problems to point out with the sliders:
+- Wasteful: almost every simulation is rejected; the acceptance rate falls as epsilon^d with data dimension d, so real data must be compressed to a few summary statistics.
+- Bias vs noise: large epsilon blurs the posterior (try 0.3); small epsilon leaves few samples (try 0.01 with N = 500).
+- Not amortised: move x0 and the accepted set changes; a new observation needs a new acceptance step.
+
+Click 2 – neural SBI keeps the recipe (prior, simulate) but replaces accept/reject with density estimation on all simulations. The orange curve is a 3-component mixture density network trained in the browser. Dragging x0 just re-evaluates it (amortised). Switch to the informative prior and drag x0 to ~0 or ~1.2: no simulations there, so the network extrapolates badly – NPE is only as good as the training set.
+-->
 
 ---
 
@@ -208,33 +233,33 @@ With finite simulations, *rejection ABC* keeps only those within $\epsilon$ of $
 
 # Why use SBI?
 
-<div class="grid grid-cols-3 gap-5 mt-6">
+<div class="grid grid-cols-3 gap-4 mt-2 text-[0.85rem] leading-snug">
 
 <div v-click class="card">
 <div class="kicker">No likelihood needed</div>
 
-Any stochastic simulator works: hydrodynamic and semi-analytic models, synthetic observables from forward modelling.
+Any stochastic simulator works: cosmological simulations, galaxy formation models, gravitational-wave signals in detector noise.
 
 </div>
 
 <div v-click class="card">
 <div class="kicker">Amortised</div>
 
-Train once, then infer for millions of objects in milliseconds each: SED fitting at survey scale.
+Train once, then infer in milliseconds per object: catalogue-scale inference for surveys like Euclid and Rubin, or rapid follow-up alerts.
 
 </div>
 
 <div v-click class="card">
 <div class="kicker">Implicit marginalisation</div>
 
-Nuisance parameters (dust, AGN, photoionisation, noise) are marginalised for free, simply by not inferring them.
+Nuisance parameters (baryonic physics, instrument systematics, initial conditions) are marginalised for free, simply by not inferring them.
 
 </div>
 
 <div v-click class="card">
 <div class="kicker">High-dimensional data</div>
 
-Embedding networks learn compact summaries of spectra, images and pixel maps.
+Embedding networks learn compact summaries of fields, images, spectra and time series, beyond hand-picked statistics.
 
 </div>
 
@@ -248,7 +273,7 @@ Coverage tests over thousands of mock observations become cheap, so uncertaintie
 <div v-click class="card">
 <div class="kicker">Model comparison</div>
 
-Compare physical models directly, e.g. Pop III vs BPASS stellar populations at high redshift.
+Compare physical models directly, e.g. competing feedback prescriptions, dark matter models or stellar population codes.
 
 </div>
 
