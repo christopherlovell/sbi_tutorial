@@ -20,7 +20,7 @@ class: cover
 <p class="lead">What to do when you can simulate, but can't write down the likelihood</p>
 
 <div class="abs-bl m-12 text-sm muted">
-Chris Lovell · companion to the CAMELS × LtU-ILI notebook
+Chris Lovell
 </div>
 
 ---

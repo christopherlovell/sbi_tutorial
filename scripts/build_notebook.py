@@ -36,8 +36,10 @@ Our "simulator" is the [CAMELS](https://camels.readthedocs.io) suite of cosmolog
 |---|---|---|
 | $\Omega_m$ | matter density | 0.1 – 0.5 |
 | $\sigma_8$ | amplitude of matter fluctuations | 0.6 – 1.0 |
-| $A_{\rm SN1}$, $A_{\rm SN2}$ | supernova feedback (energy / wind speed) | 0.25 – 4, 0.5 – 2 |
-| $A_{\rm AGN1}$, $A_{\rm AGN2}$ | AGN feedback (energy / ejection speed or burstiness) | 0.25 – 4, 0.5 – 2 |
+| $A_{\rm SN1}$, $A_{\rm SN2}$ | supernova feedback | 0.25 – 4, 0.5 – 2 |
+| $A_{\rm AGN1}$, $A_{\rm AGN2}$ | AGN feedback | 0.25 – 4, 0.5 – 2 (SIMBA) or 0.25 – 4 (Swift-EAGLE) |
+
+The cosmological parameters mean the same thing in every CAMELS suite, but the astrophysical ones scale *different* physics in each galaxy formation model. In SIMBA, for example, $A_{\rm SN1}$ scales the mass loading of galactic winds; in Swift-EAGLE it scales the thermal energy injected per supernova.
 
 Each simulation also has a different random seed for its initial conditions, so even at fixed parameters the GSMF would vary (*cosmic variance*). This stochasticity is exactly what SBI is designed to handle: rather than writing down a likelihood $p(x \,|\, \theta)$, we learn it (or the posterior $p(\theta \,|\, x)$ directly) from pairs of simulated parameters $\theta$ and data $x$.
 
@@ -72,7 +74,7 @@ This only needs a few MB per simulation thanks to HTTP range requests, and takes
 """ % REPO_RAW)
 
 code(r"""
-SUITE = "SIMBA"  # "Swift-EAGLE" once its LH catalogues are public
+SUITE = "SIMBA"  # or "Swift-EAGLE"
 DATA_FILE = f"data/camels_{SUITE}_LH_z090.hdf5"
 """)
 
@@ -92,6 +94,8 @@ import torch
 with h5py.File(DATA_FILE, "r") as h:
     params = h["params"][:]
     param_names = list(h["params"].attrs["names"])
+    param_min, param_max = h["params"].attrs["min"], h["params"].attrs["max"]
+    param_log = h["params"].attrs["log"]  # sampled uniformly in log10
     gsmf = h["gsmf"][:]
     gsmf_edges = h["gsmf"].attrs["bin_edges"]
     shmr = h["shmr"][:]
@@ -156,7 +160,7 @@ Neural density estimators work best with well-behaved inputs, so we
 * keep only the SHMR halo-mass bins that are populated in *every* simulation,
 * concatenate the two into a single data vector $x$.
 
-For the parameters $\theta$, the feedback amplitudes were sampled uniformly in $\log A$, so we infer $\log_{10} A$; this makes the prior a simple uniform box.
+For the parameters $\theta$, the feedback amplitudes were sampled uniformly in $\log A$ (flagged by `param_log`), so we infer $\log_{10} A$; this makes the prior a simple uniform box.
 """)
 
 code(r"""
@@ -172,7 +176,7 @@ print("SHMR bins kept:", shmr_bins[shmr_keep])
 x_all = np.hstack([log_phi, shmr[:, shmr_keep]]).astype(np.float32)
 
 theta_all = params.copy()
-theta_all[:, 2:] = np.log10(theta_all[:, 2:])
+theta_all[:, param_log] = np.log10(theta_all[:, param_log])
 theta_all = theta_all.astype(np.float32)
 labels = [r"$\Omega_m$", r"$\sigma_8$", r"$\log A_{\rm SN1}$",
           r"$\log A_{\rm AGN1}$", r"$\log A_{\rm SN2}$", r"$\log A_{\rm AGN2}$"]
@@ -194,7 +198,7 @@ x_test, theta_test = x_all[test], theta_all[test]
 """)
 
 md(r"""
-Our **prior** is uniform over the region spanned by the Latin hypercube.
+Our **prior** is uniform over the region spanned by the Latin hypercube; its bounds are stored alongside the parameters in the data file.
 """)
 
 code(r"""
@@ -206,8 +210,8 @@ from ili.validation.metrics import PlotSinglePosterior, PosteriorCoverage
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print("Device:", device)
 
-prior_low = np.array([0.1, 0.6, np.log10(0.25), np.log10(0.25), np.log10(0.5), np.log10(0.5)])
-prior_high = np.array([0.5, 1.0, np.log10(4.0), np.log10(4.0), np.log10(2.0), np.log10(2.0)])
+prior_low = np.where(param_log, np.log10(param_min), param_min)
+prior_high = np.where(param_log, np.log10(param_max), param_max)
 assert np.all(theta_all >= prior_low - 1e-4) and np.all(theta_all <= prior_high + 1e-4)
 
 prior = ili.utils.Uniform(low=prior_low, high=prior_high, device=device)
@@ -501,7 +505,7 @@ md(r"""
 
 1. **Which statistic carries the information?** Re-train NPE using only the GSMF (or only the SHMR). Which parameters lose their constraints?
 2. **Is our NPE well calibrated?** Try a smaller training set (e.g. 200 simulations). How do the coverage and TARP plots change? Try an ensemble with an MDN (`model="mdn"`) as well as MAFs.
-3. **Model misspecification.** Train on SIMBA and apply the posterior to the Swift-EAGLE LH suite (`python download_camels.py --suite Swift-EAGLE`). The astrophysical parameters mean different things in the two models, but $\Omega_m$ and $\sigma_8$ do not. Are they still recovered? This is a key concern when applying simulation-trained models to real data.
+3. **Model misspecification.** Train on SIMBA and apply the posterior to the Swift-EAGLE LH suite (`data/camels_Swift-EAGLE_LH_z090.hdf5`, built in exactly the same way). The astrophysical parameters mean different things in the two models, but $\Omega_m$ and $\sigma_8$ do not. Are they still recovered? This is a key concern when applying simulation-trained models to real data.
 4. **Coverage for the MCMC approach.** Run the emulator + MCMC on 20 test simulations and compute the fraction for which the truth lies within the 68% credible interval. Is the Gaussian likelihood calibrated?
 5. **Synthetic observables.** Following the earlier part of this tutorial, replace the stellar mass function with a forward-modelled luminosity function computed with `synthesizer`.
 """)

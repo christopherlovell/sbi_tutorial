@@ -11,15 +11,18 @@ Each simulation is reduced immediately to its data vector, cached as a tiny
 .npz (so the script can be interrupted and resumed), and the final output is
 a single small HDF5 file:
 
-    params      (N_sim, N_param)  LH parameters (attrs: names)
+    params      (N_sim, N_param)  LH parameters (attrs: names, min, max, log)
     sim_names   (N_sim,)
     gsmf        (N_sim, N_mbin)   phi [Mpc^-3 dex^-1]          (attrs: bin_edges)
     shmr        (N_sim, N_hbin)   median log10 M*_cen [Msun]   (attrs: bin_edges)
 
+The public catalogues and parameter tables live under FOF_Subfind/ and
+Parameters/; the copies under Sims/ are not always readable (e.g. Swift-EAGLE).
+
 Examples:
     python download_camels.py --suite SIMBA
     python download_camels.py --suite Swift-EAGLE --nsims 100 --workers 32
-    python download_camels.py --suite SIMBA --root /path/to/camels/Sims
+    python download_camels.py --suite SIMBA --root /path/to/camels/mirror
 """
 
 import argparse
@@ -32,7 +35,7 @@ import h5py
 import numpy as np
 from tqdm import tqdm
 
-BASE_URL = "https://users.flatironinstitute.org/~camels/Sims"
+BASE_URL = "https://users.flatironinstitute.org/~camels"
 
 GSMF_EDGES = np.arange(8.5, 11.76, 0.25)  # log10 M* [Msun]
 SHMR_EDGES = np.arange(10.5, 13.01, 0.25)  # log10 M200c [Msun]
@@ -49,6 +52,17 @@ def read_params(path):
     names = [n for n in header[1:] if n.lower() != "seed"]
     values = np.array([[float(v) for v in r[1 : 1 + len(names)]] for r in rows])
     return names, sims, values
+
+
+def read_ranges(path):
+    """Parse an Info_*_6params.csv into the prior (min, max, log) per parameter."""
+    with fsspec.open(path, "r") as f:
+        rows = [line.split(",") for line in f.read().strip().splitlines()[1:]]
+    return {
+        "min": [float(r[4]) for r in rows],
+        "max": [float(r[5]) for r in rows],
+        "log": [bool(int(r[2])) for r in rows],
+    }
 
 
 def summarise(path):
@@ -92,7 +106,7 @@ def main():
     p.add_argument("--set", default="LH", help="LH, 1P, CV, ...")
     p.add_argument("--box", default="L25n256")
     p.add_argument("--snap", default="090", help="090 is z=0")
-    p.add_argument("--root", default=BASE_URL, help="URL or local Sims dir")
+    p.add_argument("--root", default=BASE_URL, help="CAMELS URL or local mirror")
     p.add_argument("--params-file", default=None, help="Override params table")
     p.add_argument("--nsims", type=int, default=None, help="Only first N sims")
     p.add_argument("--workers", type=int, default=16)
@@ -100,11 +114,13 @@ def main():
     p.add_argument("--out", default=None)
     args = p.parse_args()
 
-    set_dir = f"{args.root}/{args.suite}/{args.box}/{args.set}"
+    set_dir = f"{args.root}/FOF_Subfind/{args.suite}/{args.box}/{args.set}"
+    param_dir = f"{args.root}/Parameters/{args.suite}"
     params_file = args.params_file or (
-        f"{set_dir}/CosmoAstroSeed_{args.suite}_{args.box}_{args.set}.txt"
+        f"{param_dir}/CosmoAstroSeed_{args.suite}_{args.box}_{args.set}.txt"
     )
     names, sims, values = read_params(params_file)
+    ranges = read_ranges(f"{param_dir}/Info_{args.suite}_{args.box}_6params.csv")
     if args.nsims is not None:
         sims, values = sims[: args.nsims], values[: args.nsims]
 
@@ -129,12 +145,15 @@ def main():
             print(f"  {s}: {e}")
 
     keep = [i for i, s in enumerate(sims) if os.path.exists(f"{cache}/{s}.npz")]
+    if not keep:
+        raise SystemExit("No simulations were summarised; nothing to write.")
     vecs = [np.load(f"{cache}/{sims[i]}.npz") for i in keep]
 
     out = args.out or f"camels_{args.suite}_{args.set}_z{args.snap}.hdf5"
     with h5py.File(out, "w") as h:
         h.attrs.update(suite=args.suite, set=args.set, snap=args.snap)
-        h.create_dataset("params", data=values[keep]).attrs["names"] = names
+        dset = h.create_dataset("params", data=values[keep])
+        dset.attrs.update(names=names, **ranges)
         h.create_dataset("sim_names", data=sims[keep].astype("S"))
         h.create_dataset("gsmf", data=[v["gsmf"] for v in vecs]).attrs[
             "bin_edges"
