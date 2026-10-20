@@ -334,15 +334,15 @@ Expensive simulators limit training sets; the choice of summary statistic sets h
 
 # Hands-on
 
-<div class="grid grid-cols-[1.2fr_1fr] gap-12 mt-4">
+<div class="grid grid-cols-[1.2fr_1fr] gap-10 -mt-2">
 <div>
 
-<div class="card">
+<div class="card text-sm">
 <div class="kicker">Notebook</div>
 
 **Inferring cosmology and feedback from CAMELS**
 
-GSMF + stellar–halo mass relation from 1000 SIMBA simulations → NPE, NLE and NRE with LtU-ILI, and a comparison to emulator + MCMC.
+GSMF + stellar–halo mass relation from 1000 SIMBA / Swift-EAGLE simulations → NPE, NLE and NRE with LtU-ILI, and a comparison to emulator + MCMC.
 
 [Open in Colab](https://colab.research.google.com/github/christopherlovell/sbi_tutorial/blob/main/CAMELS_SBI_tutorial.ipynb) · [GitHub](https://github.com/christopherlovell/sbi_tutorial)
 
@@ -359,6 +359,20 @@ GSMF + stellar–halo mass relation from 1000 SIMBA simulations → NPE, NLE and
 
 **Further reading**
 - Cranmer, Brehmer & Louppe 2020, *The frontier of simulation-based inference*, PNAS
+
+</div>
+</div>
+
+<div class="card mt-4 grid grid-cols-[auto_1fr] gap-6 items-center text-sm">
+<img src="./images/sbi-galev-2026.jpg" class="h-[140px] rounded-lg" alt="SBI for Galaxy Evolution 2026 participants, Kavli Institute for Cosmology, Cambridge" />
+<div>
+<div class="kicker">Community</div>
+
+**SBI for Galaxy Evolution** meeting
+
+- [2024](https://sbi-galev.github.io/2024/), [2025](https://sbi-galev.github.io/2025/) – Bristol
+- [2026](https://sbi-galev.github.io/2026/) – Kavli Institute for Cosmology, Cambridge
+- **2027 – London, ~June**
 
 </div>
 </div>
