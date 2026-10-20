@@ -86,3 +86,8 @@ a {
   color: var(--accent);
   border-bottom: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
 }
+
+/* fixed-height caption that changes with clicks, so content below stays put */
+.subhead p {
+  margin: 0;
+}

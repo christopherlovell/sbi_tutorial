@@ -28,6 +28,8 @@ Chris Lovell
 <div class="grid grid-cols-[1.1fr_1fr] gap-10 items-start text-[0.95rem]">
 <div>
 
+<div class="text-[1.4em] -mt-2 mb-1">
+
 $$
 \underbrace{P(\boldsymbol{\theta} \mid \mathbf{x})}_{\text{posterior}}
 = \frac{
@@ -37,6 +39,8 @@ $$
   \underbrace{P(\mathbf{x})}_{\text{evidence}}
 }
 $$
+
+</div>
 
 <v-clicks>
 
@@ -165,40 +169,39 @@ clicks: 3
 </style>
 
 ---
-clicks: 2
+clicks: 5
 ---
 
-# Posteriors and likelihoods are slices of the joint
+# From the joint to the posterior
 
-<div class="-mt-4 mb-1 text-center text-sm">
-
-$P(\theta \mid x) \propto P(x \mid \theta)\, P(\theta)$ · a toy simulator: $x = \mathrm{softplus}(\theta) + \mathcal{N}(0, \sigma^2)$
-
-</div>
-
-<JointExplorer :step="$clicks" />
-
-<div class="credit">Adapted from Matt Ho</div>
-
----
-clicks: 2
----
-
-# From samples to posteriors
-
-<div class="-mt-3 mb-3 text-sm muted min-h-[2.6em]">
+<div class="subhead -mt-3 mb-2 text-sm muted h-[3.2em]">
 <v-switch>
 <template #0>
 
-**Simulations sample the joint:** draw $\theta \sim P(\theta)$, then run the simulator, $x \sim P(x \mid \theta)$. Each dot is one simulation.
+A toy simulator, $x = \mathrm{softplus}(\theta) + \mathcal{N}(0, \sigma^2)$, and a prior $P(\theta)$ together define the **joint** distribution $P(x, \theta) = P(x \mid \theta)\, P(\theta)$.
 
 </template>
 <template #1>
 
-**Rejection ABC** (Rubin 1984; Pritchard et al. 1999) keeps the simulations with $|x - x_0| < \epsilon$: the slice from the previous slide, built from samples. Most simulations are thrown away.
+Fix the data at $x_0$ (blue) and the slice through the joint is the **posterior**, $P(\theta \mid x_0) \propto P(x_0 \mid \theta)\, P(\theta)$. Fix $\theta_0$ (red) and it is the **likelihood**.
 
 </template>
 <template #2>
+
+Where the simulator is flat, the data cannot tell parameters apart, so the posterior falls back to the prior.
+
+</template>
+<template #3>
+
+In practice we cannot evaluate the joint, only **sample** it: draw $\theta \sim P(\theta)$, then run the simulator. Each dot is one simulation.
+
+</template>
+<template #4>
+
+**Rejection ABC** (Rubin 1984; Pritchard et al. 1999) keeps the simulations with $|x - x_0| < \epsilon$: the slice, built from samples. Most simulations are thrown away.
+
+</template>
+<template #5>
 
 **Neural SBI** instead fits a conditional density $q(\theta \mid x)$ to *all* the simulations: here a small mixture density network, trained live. Drag $x_0$: no retraining needed.
 
@@ -206,17 +209,21 @@ clicks: 2
 </v-switch>
 </div>
 
-<JointExplorer controls :stage="$clicks" />
+<JointExplorer :step="$clicks" />
+
+<div class="credit">Joint and slices adapted from Matt Ho</div>
 
 <!--
-Click 1 – ABC: draw from the prior, simulate, keep theta if the simulated x is within epsilon of the observation. The kept thetas sample P(theta | d(x, x_obs) < epsilon), which tends to the true posterior as epsilon -> 0.
+Clicks 0–2: the joint, its slices, and the prior-dominated regime where softplus is flat.
+
+Click 4 – ABC: draw from the prior, simulate, keep theta if the simulated x is within epsilon of the observation. The kept thetas sample P(theta | d(x, x_obs) < epsilon), which tends to the true posterior as epsilon -> 0.
 
 Problems to point out with the sliders:
 - Wasteful: almost every simulation is rejected; the acceptance rate falls as epsilon^d with data dimension d, so real data must be compressed to a few summary statistics.
 - Bias vs noise: large epsilon blurs the posterior (try 0.3); small epsilon leaves few samples (try 0.01 with N = 500).
 - Not amortised: move x0 and the accepted set changes; a new observation needs a new acceptance step.
 
-Click 2 – neural SBI keeps the recipe (prior, simulate) but replaces accept/reject with density estimation on all simulations. The orange curve is a 3-component mixture density network trained in the browser. Dragging x0 just re-evaluates it (amortised). Switch to the informative prior and drag x0 to ~0 or ~1.2: no simulations there, so the network extrapolates badly – NPE is only as good as the training set.
+Click 5 – neural SBI keeps the recipe (prior, simulate) but replaces accept/reject with density estimation on all simulations. The orange curve is a 3-component mixture density network trained in the browser. Dragging x0 just re-evaluates it (amortised). Switch to the informative prior and drag x0 to ~0 or ~1.2: no simulations there, so the network extrapolates badly – NPE is only as good as the training set.
 -->
 
 ---
@@ -347,7 +354,7 @@ GSMF + stellar–halo mass relation from 1000 SIMBA simulations → NPE, NLE and
 **Tools**
 - [LtU-ILI](https://github.com/maho3/ltu-ili) – Ho et al. 2024
 - [sbi](https://github.com/sbi-dev/sbi) – Tejero-Cantero et al. 2020
-- [Synthesizer](https://synthesizer-project.github.io/synthesizer/) – Lovell et al. 2025; Roper et al. 2025
+<!-- - [Synthesizer](https://synthesizer-project.github.io/synthesizer/) – Lovell et al. 2025; Roper et al. 2025 -->
 - [CAMELS](https://camels.readthedocs.io) – Villaescusa-Navarro et al. 2021
 
 **Further reading**

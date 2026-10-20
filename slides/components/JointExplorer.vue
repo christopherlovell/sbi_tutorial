@@ -1,11 +1,10 @@
 <script setup>
-// Prior, joint P(x, theta) and its conditional slices for the toy simulator.
-// Drag on the joint panel to choose (theta_0, x_0).
-//   step 0: prior + joint;  step 1: slices at an informative point;
-//   step 2: slices where the data is uninformative (flat part of the simulator)
-// With `controls` (the playground), `stage` reveals the samples-to-posterior story:
-//   stage 0: simulations;  stage 1: ABC band + histogram;
-//   stage 2: a mixture density network q(theta | x) fit to all simulations
+// The toy simulator's prior, joint P(x, theta) and conditional slices, then
+// samples, rejection ABC and a neural posterior estimate. Drag on the joint
+// to choose (theta_0, x_0). Clicks (step):
+//   0: prior + joint            1: slices at an informative point
+//   2: slices where the simulator is flat (posterior ~ prior)
+//   3: simulations (+ controls)  4: rejection ABC  5: NPE fit to all sims
 import { computed, onBeforeUnmount, onMounted, ref, toRaw, watch } from 'vue'
 import { scaleLinear } from 'd3-scale'
 import {
@@ -14,28 +13,27 @@ import {
 } from '../lib/toy.js'
 import { evalMDN } from '../lib/mdn.js'
 
-const props = defineProps({
-  step: { type: Number, default: 99 },
-  stage: { type: Number, default: 99 },
-  controls: Boolean,
-})
+const props = defineProps({ step: { type: Number, default: 99 } })
 
 const prior = ref('bimodal')
 const sigma = ref(0.1)
-const showSims = ref(props.controls)
+const simsOn = ref(true)
 const nSims = ref(2000)
 const eps = ref(0.05)
 
 const theta0 = ref(1.0)
 const x0 = ref(0.75)
 
-const PRESETS = [
-  [1.0, 0.75],
-  [1.0, 0.75],
-  [-0.1, 0.05],
-]
+const showSlices = computed(() => props.step >= 1)
+const sampling = computed(() => props.step >= 3)
+const showSims = computed(() => sampling.value && simsOn.value)
+const showABC = computed(() => showSims.value && props.step >= 4)
+const showNPE = computed(() => showSims.value && props.step >= 5)
 
-// tween between presets when stepping through clicks
+// ---- move (theta_0, x_0) between presets when stepping through clicks
+const INFORMATIVE = [1.0, 0.75]
+const FLAT = [-0.1, 0.05]
+const preset = (s) => (s === 2 ? FLAT : s <= 3 ? INFORMATIVE : null)
 let raf = 0
 function moveTo([t1, x1]) {
   cancelAnimationFrame(raf)
@@ -52,16 +50,15 @@ function moveTo([t1, x1]) {
 }
 watch(
   () => props.step,
-  (s) => s < PRESETS.length && moveTo(PRESETS[s]),
+  (s) => preset(s) && moveTo(preset(s)),
 )
-const showSlices = computed(() => props.step >= 1)
 
-// ---- layout of the joint panel
-// the playground (controls) version drops the prior panel (the prior is
-// dashed on the posterior) and puts the controls under the joint
+// ---- layout: fixed sizes so nothing moves between clicks
 const W = 400
-const H = props.controls ? 250 : 258
-const SLICE_H = props.controls ? 132 : 140
+const H = 236
+const PRIOR_H = 74
+const SLICE_W = 340
+const SLICE_H = 128
 const m = { t: 8, r: 10, b: 32, l: 40 }
 const sx = scaleLinear().domain(THETA_RANGE).range([m.l, W - m.r])
 const sy = scaleLinear().domain(X_RANGE).range([H - m.b, m.t])
@@ -76,14 +73,12 @@ const postY = computed(() => posteriorCurve(x0.value, sigma.value, prior.value, 
 const likeY = computed(() => likelihoodCurve(theta0.value, sigma.value, xs))
 
 const sims = computed(() => (showSims.value ? simulate(nSims.value, sigma.value, prior.value, 7) : []))
-const showABC = computed(() => showSims.value && props.stage >= 1)
 const abc = computed(() => (showABC.value ? abcPosterior(sims.value, x0.value, eps.value) : null))
 
 // ---- neural posterior estimate: trained in a worker whenever the simulations
 // change, then evaluated at any x0 without retraining (amortised)
 const fit = ref(null)
 const training = ref(false)
-const trainMs = ref(0)
 let worker = null
 let job = 0
 let timer = 0
@@ -93,7 +88,6 @@ function retrain() {
   training.value = true
   timer = setTimeout(() => worker.postMessage({ id: ++job, sims: toRaw(sims.value) }), 250)
 }
-const showNPE = computed(() => showSims.value && props.stage >= 2)
 const npeY = computed(() => (showNPE.value && fit.value ? evalMDN(fit.value, x0.value, ts) : null))
 
 // ---- joint density as a banded heatmap on a canvas
@@ -144,23 +138,21 @@ function drawSims() {
 }
 
 onMounted(() => {
-  if (props.step < PRESETS.length) [theta0.value, x0.value] = PRESETS[props.step]
+  const p = preset(props.step)
+  if (p) [theta0.value, x0.value] = p
   drawJoint()
   drawSims()
-  if (props.controls) {
-    worker = new Worker(new URL('../lib/mdn.worker.js', import.meta.url), { type: 'module' })
-    worker.onmessage = ({ data }) => {
-      if (data.id !== job) return // superseded by a newer request
-      fit.value = data.model
-      trainMs.value = data.ms
-      training.value = false
-    }
-    retrain()
+  worker = new Worker(new URL('../lib/mdn.worker.js', import.meta.url), { type: 'module' })
+  worker.onmessage = ({ data }) => {
+    if (data.id !== job) return // superseded by a newer request
+    fit.value = data.model
+    training.value = false
   }
+  retrain()
 })
 onBeforeUnmount(() => worker?.terminate())
 watch([sigma, prior], drawJoint)
-watch([sims, x0, eps, showSims, showABC], drawSims)
+watch([sims, x0, eps, showABC], drawSims)
 watch(sims, retrain)
 
 // ---- dragging (convert client coords through Slidev's scaling transform)
@@ -176,6 +168,7 @@ function setFromEvent(ev) {
 }
 const down = (ev) => {
   if (!showSlices.value) return
+  cancelAnimationFrame(raf)
   dragging = true
   ev.target.setPointerCapture?.(ev.pointerId)
   setFromEvent(ev)
@@ -190,9 +183,8 @@ const fmt = (v) => +v.toFixed(2)
   <div class="explorer">
     <div class="col-left">
       <MiniPlot
-        v-if="!controls"
         :width="W"
-        :height="96"
+        :height="PRIOR_H"
         :x-domain="THETA_RANGE"
         :curves="[{ x: ts, y: priorY, color: 'var(--prior)', fill: true }]"
         title="\text{Prior } P(\theta)"
@@ -204,10 +196,9 @@ const fmt = (v) => +v.toFixed(2)
           ref="canvas"
           :width="NT"
           :height="NX"
-          class="heat"
           :style="{ left: `${m.l}px`, top: `${m.t}px`, width: `${W - m.l - m.r}px`, height: `${H - m.t - m.b}px` }"
         />
-        <canvas ref="simCanvas" :width="W * 2" :height="H * 2" class="sims" :style="{ width: `${W}px`, height: `${H}px` }" />
+        <canvas ref="simCanvas" :width="W * 2" :height="H * 2" :style="{ width: `${W}px`, height: `${H}px` }" />
         <svg
           ref="overlay"
           :width="W"
@@ -223,7 +214,7 @@ const fmt = (v) => +v.toFixed(2)
             <line v-for="t in yticks" :key="`gy${t}`" :x1="m.l" :x2="W - m.r" :y1="sy(t)" :y2="sy(t)" />
           </g>
           <rect
-            v-if="showABC && showSlices"
+            v-if="showABC"
             :x="m.l"
             :width="W - m.l - m.r"
             :y="sy(x0 + eps)"
@@ -244,41 +235,11 @@ const fmt = (v) => +v.toFixed(2)
         <div class="lab-x"><Tex expr="\text{Parameters } \theta" /></div>
         <div class="lab-y"><Tex expr="\text{Data } x" /></div>
       </div>
-      <template v-if="controls">
-        <div class="controls">
-          <div class="row wide">
-            <span class="lbl">Prior</span>
-            <div class="seg">
-              <button v-for="(p, k) in PRIORS" :key="k" :class="{ on: prior === k }" @click="prior = k">
-                {{ p.label }}
-              </button>
-            </div>
-          </div>
-          <div class="row">
-            <span class="lbl"><Tex expr="\sigma" /> noise</span>
-            <input v-model.number="sigma" type="range" min="0.02" max="0.3" step="0.01" />
-            <span class="val">{{ sigma.toFixed(2) }}</span>
-          </div>
-          <div class="row">
-            <span class="lbl"><Tex expr="\epsilon" /> ABC</span>
-            <input v-model.number="eps" type="range" min="0.01" max="0.3" step="0.01" :disabled="!showSims" />
-            <span class="val">{{ eps.toFixed(2) }}</span>
-          </div>
-          <div class="row wide">
-            <label class="lbl"><input v-model="showSims" type="checkbox" /> Simulations</label>
-            <input v-model.number="nSims" type="range" min="100" max="20000" step="100" :disabled="!showSims" />
-            <span class="val">{{ nSims }}</span>
-          </div>
-        </div>
-        <div class="note">
-          Simulations are drawn from the prior: change it and the training set changes.
-        </div>
-      </template>
     </div>
 
     <div class="col-right" :class="{ hidden: !showSlices }">
       <MiniPlot
-        :width="340"
+        :width="SLICE_W"
         :height="SLICE_H"
         :x-domain="THETA_RANGE"
         :curves="[
@@ -297,17 +258,50 @@ const fmt = (v) => +v.toFixed(2)
         <span v-if="abc"><i class="sw hist" /> ABC: {{ abc.kept }} sims</span>
         <span v-if="showNPE"><i class="sw npe" /> {{ training ? 'NPE: training…' : `NPE: ${Math.min(nSims, 3000)} sims` }}</span>
       </div>
-      <MiniPlot
-        :width="340"
-        :height="SLICE_H"
-        :x-domain="X_RANGE"
-        :curves="[{ x: xs, y: likeY, color: 'var(--like)', fill: true }]"
-        :vlines="[{ x: x0 }]"
-        :title="`\\text{Likelihood } P(x \\mid \\theta_0 = ${fmt(theta0)})`"
-        xlabel="x"
-      />
 
-      <div v-if="!controls" class="hint">Drag the point to move the slices</div>
+      <!-- fixed-height slot: likelihood before sampling, controls after -->
+      <div class="slot">
+        <template v-if="!sampling">
+          <MiniPlot
+            :width="SLICE_W"
+            :height="SLICE_H"
+            :x-domain="X_RANGE"
+            :curves="[{ x: xs, y: likeY, color: 'var(--like)', fill: true }]"
+            :vlines="[{ x: x0 }]"
+            :title="`\\text{Likelihood } P(x \\mid \\theta_0 = ${fmt(theta0)})`"
+            xlabel="x"
+          />
+          <div class="hint">Drag the point to move the slices</div>
+        </template>
+        <template v-else>
+          <div class="controls">
+            <div class="row">
+              <span class="lbl">Prior</span>
+              <div class="seg">
+                <button v-for="(p, k) in PRIORS" :key="k" :class="{ on: prior === k }" @click="prior = k">
+                  {{ p.label }}
+                </button>
+              </div>
+            </div>
+            <div class="row">
+              <span class="lbl"><Tex expr="\sigma" /> noise</span>
+              <input v-model.number="sigma" type="range" min="0.02" max="0.3" step="0.01" />
+              <span class="val">{{ sigma.toFixed(2) }}</span>
+            </div>
+            <div class="row">
+              <label class="lbl"><input v-model="simsOn" type="checkbox" /> <Tex expr="N" /> sims</label>
+              <input v-model.number="nSims" type="range" min="100" max="20000" step="100" :disabled="!simsOn" />
+              <span class="val">{{ nSims }}</span>
+            </div>
+            <div class="row" :class="{ off: !showABC }">
+              <span class="lbl"><Tex expr="\epsilon" /> ABC</span>
+              <input v-model.number="eps" type="range" min="0.01" max="0.3" step="0.01" :disabled="!showABC" />
+              <span class="val">{{ eps.toFixed(2) }}</span>
+            </div>
+          </div>
+          <div class="note">Simulations are drawn from the prior: change it and the training set changes.</div>
+        </template>
+      </div>
     </div>
   </div>
 </template>
@@ -321,6 +315,7 @@ const fmt = (v) => +v.toFixed(2)
   user-select: none;
 }
 .col-right {
+  width: 340px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -333,7 +328,7 @@ const fmt = (v) => +v.toFixed(2)
 .joint-title {
   text-align: center;
   font-size: 0.8rem;
-  margin: 6px 0 2px;
+  margin: 4px 0 2px;
   padding-left: 30px;
 }
 .joint {
@@ -344,9 +339,6 @@ const fmt = (v) => +v.toFixed(2)
   position: absolute;
   left: 0;
   top: 0;
-}
-.heat {
-  image-rendering: auto;
 }
 svg.draggable {
   cursor: crosshair;
@@ -402,6 +394,7 @@ svg.draggable {
   justify-content: center;
   font-size: 0.65rem;
   color: var(--muted);
+  height: 16px;
   margin: 4px 0 2px;
 }
 .sw {
@@ -431,37 +424,33 @@ svg.draggable {
   background: var(--post);
   opacity: 0.35;
 }
+.slot {
+  height: 196px;
+}
 .hint {
   font-size: 0.7rem;
   color: var(--muted);
   text-align: center;
-  margin-top: 6px;
-}
-.note {
-  font-size: 0.62rem;
-  color: var(--muted);
-  font-style: italic;
-  margin-top: 2px;
+  margin-top: 10px;
 }
 .controls {
-  margin-top: 26px;
+  margin-top: 14px;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 5px 16px;
-  font-size: 0.66rem;
+  gap: 8px;
+  font-size: 0.68rem;
 }
 .row {
   display: grid;
-  grid-template-columns: 62px 1fr 28px;
+  grid-template-columns: 74px 1fr 40px;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  transition: opacity 0.3s;
 }
-.row.wide {
-  grid-column: span 2;
-  grid-template-columns: 86px 1fr 40px;
+.row:first-child {
+  grid-template-columns: 74px 1fr;
 }
-.row.wide:first-child {
-  grid-template-columns: 86px 1fr;
+.row.off {
+  opacity: 0.35;
 }
 .lbl {
   color: var(--muted);
@@ -472,6 +461,12 @@ svg.draggable {
 .val {
   font-variant-numeric: tabular-nums;
   text-align: right;
+}
+.note {
+  font-size: 0.62rem;
+  color: var(--muted);
+  font-style: italic;
+  margin-top: 10px;
 }
 input[type='range'] {
   accent-color: var(--accent);
@@ -485,6 +480,7 @@ input[type='checkbox'] {
   border: 1px solid var(--line);
   border-radius: 6px;
   overflow: hidden;
+  justify-self: start;
 }
 .seg button {
   padding: 2px 9px;

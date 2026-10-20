@@ -374,6 +374,8 @@ NRE trains a **classifier** to distinguish jointly-drawn pairs $(\theta, x) \sim
 $$ r(x, \theta) = \frac{p(x \,|\, \theta)}{p(x)} = \frac{p(\theta \,|\, x)}{p(\theta)}, $$
 
 so the posterior is $p(\theta \,|\, x) = r(x,\theta)\,p(\theta)$, which again we sample with MCMC. Classifiers are simple and flexible, but we never get a normalised density, and sampling is again per-observation.
+
+With few simulations NRE tends to give broader, more conservative posteriors than NPE, and its validation loss (computed on randomly shuffled pairs) is noisy, so early stopping can halt training almost immediately. We therefore train it with larger batches, more patience, and harder contrastive training (`num_atoms`: each true $\theta$ is picked out from 20 candidates rather than the default 10).
 """)
 
 code(r"""
@@ -381,9 +383,11 @@ nets_nre = [
     ili.utils.load_nde_sbi(engine="NRE", model="resnet", hidden_features=64, repeats=2),
 ]
 
+train_args_nre = {"training_batch_size": 64, "learning_rate": 1e-3, "stop_after_epochs": 50, "num_atoms": 20}
+
 runner_nre = InferenceRunner.load(
     backend="sbi", engine="NRE", prior=prior, nets=nets_nre,
-    device=device, train_args=train_args, out_dir=None,
+    device=device, train_args=train_args_nre, out_dir=None,
 )
 
 t0 = time.perf_counter()
