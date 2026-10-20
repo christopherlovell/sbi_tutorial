@@ -1,0 +1,87 @@
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap');
+
+:root {
+  --ink: #0f172a;
+  --muted: #64748b;
+  --line: #e2e8f0;
+  --grid: #eef2f7;
+  --accent: #1f5f8b;
+  --prior: #64748b;
+  --post: #2563eb;
+  --like: #dc2626;
+  --sim: #22b8cf;
+  --infer: #f4a259;
+}
+
+.slidev-layout {
+  color: var(--ink);
+  padding: 2.2rem 3.2rem;
+}
+
+.slidev-layout h1 {
+  font-size: 1.9rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-bottom: 1.2rem;
+}
+
+.slidev-layout h1 + p {
+  opacity: 1;
+}
+
+.slidev-layout p,
+.slidev-layout li {
+  line-height: 1.55;
+}
+
+.slidev-layout.cover {
+  background: radial-gradient(circle at 85% 20%, #e6f0f8 0, white 55%);
+}
+
+.slidev-layout.cover h1 {
+  font-size: 3rem;
+  font-weight: 650;
+  margin-bottom: 0.4rem;
+}
+
+.lead {
+  color: var(--muted);
+  font-size: 1.05rem;
+}
+
+.credit {
+  position: absolute;
+  right: 2rem;
+  bottom: 1rem;
+  font-size: 0.65rem;
+  color: var(--muted);
+}
+
+.kicker {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.7rem;
+  color: var(--accent);
+  font-weight: 600;
+  margin-bottom: 0.3rem;
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.9rem 1.1rem;
+  background: white;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.accent {
+  color: var(--accent);
+}
+
+a {
+  color: var(--accent);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}

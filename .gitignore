@@ -1,0 +1,11 @@
+# kept local
+EAS 2026 presentation.pdf
+Synthesizer_tutorial.ipynb
+PLAN.md
+
+# build / cache
+__pycache__/
+.venv/
+camels_cache/
+sbi-logs/
+.ipynb_checkpoints/
